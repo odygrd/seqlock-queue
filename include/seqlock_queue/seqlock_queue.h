@@ -181,21 +181,34 @@ public:
   {
   }
 
-  value_t& prepare_write() noexcept
+  template <typename T>
+  void write(T callback) noexcept
   {
     slot_t& slot = _slots[_write_pos & _mask];
-    slot.version.fetch_add(1, std::memory_order_release);
-    assert((slot.version.load() & 1) && "Version must always be odd");
+
+    uint8_t const current_version = slot.version.load(std::memory_order_relaxed);
+    slot.version.store(current_version + 1, std::memory_order_release);
     std::atomic_signal_fence(std::memory_order_acq_rel);
-    return slot.value;
+
+    callback(slot.value);
+
+    std::atomic_signal_fence(std::memory_order_acq_rel);
+    slot.version.store(current_version + 2, std::memory_order_release);
+    _write_pos += 1;
   }
 
-  void commit_write() noexcept
+  void write(value_t const& value) noexcept
   {
     slot_t& slot = _slots[_write_pos & _mask];
+
+    uint8_t const current_version = slot.version.load(std::memory_order_relaxed);
+    slot.version.store(current_version + 1, std::memory_order_release);
     std::atomic_signal_fence(std::memory_order_acq_rel);
-    slot.version.fetch_add(1, std::memory_order_release);
-    assert(!(slot.version.load() & 1) && "Version must always be even");
+
+    slot.value = value;
+
+    std::atomic_signal_fence(std::memory_order_acq_rel);
+    slot.version.store(current_version + 2, std::memory_order_release);
     _write_pos += 1;
   }
 
@@ -221,6 +234,11 @@ public:
   {
   }
 
+  /**
+   * Non blocking read.
+   * @param result
+   * @return true if successfully read, false otherwise
+   */
   bool try_read(value_t& result) noexcept
   {
     size_t const read_index = _read_pos & _mask;

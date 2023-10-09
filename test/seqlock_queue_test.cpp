@@ -14,7 +14,7 @@ struct Test1
 };
 
 /***/
-TEST_CASE("produce_consume_full_queue_single_thread")
+TEST_CASE("produce_consume_full_queue_single_thread_1")
 {
   constexpr size_t capacity{4};
   constexpr uint32_t iterations{2000};
@@ -33,11 +33,59 @@ TEST_CASE("produce_consume_full_queue_single_thread")
     // write and read a full queue
     for (uint32_t i = 0; i < capacity; ++i)
     {
-      Test1& value = producer.prepare_write();
-      value.x = i + iters;
-      value.y = i + iters + 100;
-      value.z = i + iters + 200;
-      producer.commit_write();
+      producer.write(
+        [i, iters](Test1& test)
+        {
+          test.x = i + iters;
+          test.y = i + iters + 100;
+          test.z = i + iters + 200;
+        });
+    }
+
+    // read
+    size_t total_reads{0};
+    while (consumer.try_read(result))
+    {
+      REQUIRE_EQ(result.x, total_reads + iters);
+      REQUIRE_EQ(result.y, total_reads + iters + 100);
+      REQUIRE_EQ(result.z, total_reads + iters + 200);
+      ++total_reads;
+    }
+    REQUIRE_EQ(total_reads, capacity);
+
+    // queue is empty again
+    REQUIRE_EQ(consumer.try_read(result), false);
+  }
+
+  // queue is empty again
+  REQUIRE_EQ(consumer.try_read(result), false);
+}
+
+/***/
+TEST_CASE("produce_consume_full_queue_single_thread_2")
+{
+  constexpr size_t capacity{4};
+  constexpr uint32_t iterations{2000};
+
+  using seqlock_queue_t = sq::BoundedSeqlockQueue<Test1>;
+  seqlock_queue_t seqlock_queue{capacity};
+
+  sq::SeqlockQueueProducer<seqlock_queue_t> producer{seqlock_queue};
+  sq::SeqlockQueueConsumer<seqlock_queue_t> consumer{seqlock_queue};
+
+  Test1 result;
+  REQUIRE_EQ(consumer.try_read(result), false);
+
+  for (uint32_t iters = 0; iters < iterations; ++iters)
+  {
+    // write and read a full queue
+    for (uint32_t i = 0; i < capacity; ++i)
+    {
+      Test1 t;
+      t.x = i + iters;
+      t.y = i + iters + 100;
+      t.z = i + iters + 200;
+      producer.write(t);
     }
 
     // read
@@ -76,11 +124,13 @@ TEST_CASE("produce_consume_single_thread")
 
   for (uint32_t iters = 0; iters < iterations; ++iters)
   {
-    Test1& value = producer.prepare_write();
-    value.x = iters;
-    value.y = iters * 100;
-    value.z = iters + 200;
-    producer.commit_write();
+    producer.write(
+      [iters](Test1& test)
+      {
+        test.x = iters;
+        test.y = iters * 100;
+        test.z = iters + 200;
+      });
 
     // read
     REQUIRE_EQ(consumer.try_read(result), true);
@@ -118,22 +168,26 @@ TEST_CASE("version_wrap_around")
     // write a full queue
     for (uint32_t i = 0; i < capacity; ++i)
     {
-      Test1& value = producer.prepare_write();
-      value.x = i + iters;
-      value.y = i + iters + 100;
-      value.z = i + iters + 200;
-      producer.commit_write();
+      producer.write(
+        [i, iters](Test1& test)
+        {
+          test.x = i + iters;
+          test.y = i + iters + 100;
+          test.z = i + iters + 200;
+        });
     }
   }
 
   // version wrap around to 0
   for (uint32_t i = 0; i < 2; ++i)
   {
-    Test1& value = producer.prepare_write();
-    value.x = 1337;
-    value.y = 1127;
-    value.z = 11271;
-    producer.commit_write();
+    producer.write(
+      [](Test1& test)
+      {
+        test.x = 1337;
+        test.y = 1127;
+        test.z = 11271;
+      });
   }
 
   // now we have version 0 0 254 254
@@ -175,11 +229,13 @@ TEST_CASE("consume_then_version_wrap_around")
     // won't ready anything when version wraps around
     for (uint32_t i = 0; i < capacity; ++i)
     {
-      Test1& value = producer.prepare_write();
-      value.x = i;
-      value.y = i;
-      value.z = i;
-      producer.commit_write();
+      producer.write(
+        [i](Test1& test)
+        {
+          test.x = i;
+          test.y = i;
+          test.z = i;
+        });
     }
 
     // First consume a full queue, that will change the _read_pos consumer value
@@ -195,22 +251,26 @@ TEST_CASE("consume_then_version_wrap_around")
   {
     for (uint32_t i = 0; i < capacity; ++i)
     {
-      Test1& value = producer.prepare_write();
-      value.x = i + iters;
-      value.y = i + iters + 100;
-      value.z = i + iters + 200;
-      producer.commit_write();
+      producer.write(
+        [i, iters](Test1& test)
+        {
+          test.x = i + iters;
+          test.y = i + iters + 100;
+          test.z = i + iters + 200;
+        });
     }
   }
 
   // version wrap around to 0
   for (uint32_t i = 0; i < 2; ++i)
   {
-    Test1& value = producer.prepare_write();
-    value.x = 1337;
-    value.y = 1127;
-    value.z = 11271;
-    producer.commit_write();
+    producer.write(
+      [](Test1& test)
+      {
+        test.x = 1337;
+        test.y = 1127;
+        test.z = 11271;
+      });
   }
 
   // now we have version 0 0 254 254 after writing the above 2 Slots,
