@@ -142,6 +142,11 @@ public:
   using value_t = T;
   using slot_t = Slot<value_t, SlotAlignment>;
 
+  BoundedSeqlockQueue(BoundedSeqlockQueue const&) = delete;
+  BoundedSeqlockQueue& operator=(BoundedSeqlockQueue const&) = delete;
+  BoundedSeqlockQueue(BoundedSeqlockQueue&&) = delete;
+  BoundedSeqlockQueue& operator=(BoundedSeqlockQueue&&) = delete;
+
   BoundedSeqlockQueue(size_t capacity, bool huge_pages = false)
     : _capacity(detail::next_power_of_2(capacity)), _mask(_capacity - 1)
   {
@@ -153,6 +158,8 @@ public:
       new (_slots + i) slot_t{};
     }
   };
+
+  ~BoundedSeqlockQueue() { detail::free_aligned(_slots); }
 
   template <typename>
   friend class SeqlockQueueProducer;
@@ -173,6 +180,11 @@ class SeqlockQueueProducer
 public:
   using value_t = typename TBoundedSeqlockQueue::value_t;
   using slot_t = typename TBoundedSeqlockQueue::slot_t;
+
+  SeqlockQueueProducer(SeqlockQueueProducer const&) = delete;
+  SeqlockQueueProducer& operator=(SeqlockQueueProducer const&) = delete;
+  SeqlockQueueProducer(SeqlockQueueProducer&&) = delete;
+  SeqlockQueueProducer& operator=(SeqlockQueueProducer&&) = delete;
 
   explicit SeqlockQueueProducer(TBoundedSeqlockQueue const& bounded_seqlock_queue)
     : _slots(bounded_seqlock_queue._slots),
@@ -224,6 +236,11 @@ class SeqlockQueueConsumer
 public:
   using value_t = typename TBoundedSeqlockQueue::value_t;
   using slot_t = typename TBoundedSeqlockQueue::slot_t;
+
+  SeqlockQueueConsumer(SeqlockQueueConsumer const&) = delete;
+  SeqlockQueueConsumer& operator=(SeqlockQueueConsumer const&) = delete;
+  SeqlockQueueConsumer(SeqlockQueueConsumer&&) = delete;
+  SeqlockQueueConsumer& operator=(SeqlockQueueConsumer&&) = delete;
 
   explicit SeqlockQueueConsumer(TBoundedSeqlockQueue& bounded_seqlock_queue)
     : _slots(bounded_seqlock_queue._slots),
