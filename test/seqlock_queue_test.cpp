@@ -225,7 +225,7 @@ TEST_CASE("consume_then_version_wrap_around")
   for (uint32_t iters = 0; iters < 2; ++iters)
   {
     // write and read a full queue.
-    // we need to consume at least 2 queues to make _read_pos at least > 2, otherwise it
+    // we need to consume at least 2 queues to make _read_index at least > 2, otherwise it
     // won't ready anything when version wraps around
     for (uint32_t i = 0; i < capacity; ++i)
     {
@@ -238,7 +238,7 @@ TEST_CASE("consume_then_version_wrap_around")
         });
     }
 
-    // First consume a full queue, that will change the _read_pos consumer value
+    // First consume a full queue, that will change the _read_index consumer value
     size_t total_reads{0};
     while (consumer.try_read(result))
     {

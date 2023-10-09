@@ -184,7 +184,7 @@ public:
   template <typename T>
   void write(T callback) noexcept
   {
-    slot_t& slot = _slots[_write_pos & _mask];
+    slot_t& slot = _slots[_write_index++ & _mask];
 
     uint8_t const current_version = slot.version.load(std::memory_order_relaxed);
     slot.version.store(current_version + 1, std::memory_order_release);
@@ -194,12 +194,11 @@ public:
 
     std::atomic_signal_fence(std::memory_order_acq_rel);
     slot.version.store(current_version + 2, std::memory_order_release);
-    _write_pos += 1;
   }
 
   void write(value_t const& value) noexcept
   {
-    slot_t& slot = _slots[_write_pos & _mask];
+    slot_t& slot = _slots[_write_index++ & _mask];
 
     uint8_t const current_version = slot.version.load(std::memory_order_relaxed);
     slot.version.store(current_version + 1, std::memory_order_release);
@@ -209,14 +208,13 @@ public:
 
     std::atomic_signal_fence(std::memory_order_acq_rel);
     slot.version.store(current_version + 2, std::memory_order_release);
-    _write_pos += 1;
   }
 
 private:
   slot_t* _slots{nullptr};
   size_t _capacity{0};
   size_t _mask{0};
-  size_t _write_pos{0};
+  size_t _write_index{0};
 };
 
 /***/
@@ -241,8 +239,8 @@ public:
    */
   bool try_read(value_t& result) noexcept
   {
-    size_t const read_index = _read_pos & _mask;
-    slot_t const& slot = _slots[read_index];
+    size_t const index = _read_index & _mask;
+    slot_t const& slot = _slots[index];
 
     uint8_t const version_1 = slot.version.load(std::memory_order_acquire);
     std::atomic_signal_fence(std::memory_order_acq_rel);
@@ -280,16 +278,16 @@ public:
 
     // When we have read all items for the queue we will wrap around, we need to increment
     // the reader version
-    if (read_index == 0)
+    if (index == 0)
     {
       _read_version = version_2;
     }
-    else if (read_index == (_capacity - 1))
+    else if ((index + 1) == _capacity)
     {
       _read_version = version_2 + 2;
     }
 
-    _read_pos += 1;
+    ++_read_index;
 
     return true;
   }
@@ -298,7 +296,7 @@ private:
   slot_t const* _slots{nullptr};
   size_t _capacity{0};
   size_t _mask{0};
-  size_t _read_pos{0};
+  size_t _read_index{0};
   uint8_t _read_version{0};
 };
 } // namespace sq
